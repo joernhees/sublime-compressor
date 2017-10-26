@@ -1,17 +1,17 @@
 # encoding: utf-8
 
-import gzip
-# import bz2  # FIXME: spits out an error when imported?!?
-
 import sublime
 import sublime_plugin
 
+import gzip
 
 compression_formats = {
     '.gz': gzip.open,
-    # '.bz2': bz2.open,
 }
 
+if sublime.version() >= '3114' :
+    import bz2
+    compression_formats['.bz2'] = bz2.open
 
 def get_decompressor_by_filename(filename):
     for suffix, decompressor in compression_formats.items():
