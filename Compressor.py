@@ -47,7 +47,12 @@ def get_decompressor_by_header(filename):
                 continue
             print(compression_module['module'])
             header = compression_module['header']
+            len_read   = len(read_header)
             len_header = len(header)
+            min_len = min(len_header,len_read)
+
+            if ( min_len > 0 ) and ( read_header[ 0: min_len] != header[ 0: min_len] ):
+                continue
             while len(read_header) < len_header :
                 read_header.append(ord(f.read(1)))
             if read_header[ 0: len_header ] == header:
