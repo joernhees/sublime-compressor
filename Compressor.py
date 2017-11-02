@@ -12,11 +12,11 @@ import sublime_plugin
 
 '''
 compression_modules = [
-    { 'module' : 'gzip', 'depend' : 'zlib',  'extension' : '.gz', 'header':'\x1f\x8b' },
+    { 'module' : 'gzip', 'depend' : 'zlib',  'extension' : '.gz', 'header':[0x1F,0x8B] },
     # since build 3114
-    { 'module' : 'bz2',  'depend' : '_bz2',  'extension' : '.bz2', 'header' : 'BZ'},
+    { 'module' : 'bz2',  'depend' : '_bz2',  'extension' : '.bz2', 'header' : [0x42,0x5A] },
     # future proof 20171031
-    { 'module' : 'lzma', 'depend' : '_lzma', 'extension' : '.xz', 'header' : '\xFD7zXZ\x00'} 
+    { 'module' : 'lzma', 'depend' : '_lzma', 'extension' : '.xz', 'header' : [0xDF,0x37,0x7A,0x58,0x5A,0x00] } 
 ]
 
 compression_formats = {}
@@ -36,6 +36,23 @@ def get_decompressor_by_filename(filename):
     for suffix, decompressor in compression_formats.items():
         if filename.endswith(suffix):
             return suffix, decompressor
+    return None, None
+
+def get_decompressor_by_header(filename):
+    read_header = []
+    with open(filename,"rb") as f:
+        for compression_module in compression_modules :
+            suffix = compression_module['extension']
+            if not suffix in compression_formats:
+                continue
+            print(compression_module['module'])
+            header = compression_module['header']
+            len_header = len(header)
+            while len(read_header) < len_header :
+                read_header.append(ord(f.read(1)))
+            if read_header[ 0: len_header ] == header:
+                decompressor = compression_formats[suffix]
+                return suffix, decompressor
     return None, None
 
 class DecompressFileCommand(sublime_plugin.TextCommand):
@@ -65,9 +82,11 @@ class DecompressFileCommand(sublime_plugin.TextCommand):
         view.set_read_only(True)
 
 class OpenCompressedFile(sublime_plugin.EventListener):
+
     def on_load(self, view):
         filename = view.file_name()
-        suffix, decompressor = get_decompressor_by_filename(filename)
+        # suffix, decompressor = get_decompressor_by_filename(filename)
+        suffix, decompressor = get_decompressor_by_header(filename)
         if suffix and decompressor:
             sublime.status_message("opening compressed file: " + filename)
             print("opening compressed file: " + filename)
