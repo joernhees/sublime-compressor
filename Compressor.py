@@ -4,7 +4,6 @@ Sublime text de-Compressor
 View compressed files ( gzip, bzip2 ) content in sublime text
 
 '''
-import importlib
 from os.path import basename, join
 from os import remove
 import sys
@@ -35,7 +34,7 @@ for compression_module in compression_modules:
     if dependendy in sys.builtin_module_names:
         module = compression_module['module']
 
-        decompressor = importlib.import_module(module)
+        decompressor = __import__(module)
         compression_module['open'] = decompressor.open
 
 def get_decompressor_by_header(filename):
@@ -76,29 +75,47 @@ def get_decompressor_by_header(filename):
                 return suffix, decompressor
     return None, None
 
+def decompressInputFile(view):
+    if view.get_status('decompressed'):
+        return
+    '''
+    Execute work for both version
+    ''' 
+    filepath = view.file_name()
+    suffix, decompressor = get_decompressor_by_header(filepath)
+    if suffix and decompressor:
+        window = view.window()
 
-class OpenCompressedFile(sublime_plugin.EventListener):
+        '''
+        https://stackoverflow.com/a/25631071
+        you apparently cannot close a view outside of a command 
+        using `view.close` would throw:
+            AttributeError: 'View' object has no attribute 'close'
+        '''
+        view.window().run_command('close_file')
 
-    def on_load_async(self, view):
-        filepath = view.file_name()
-        suffix, decompressor = get_decompressor_by_header(filepath)
-        if suffix and decompressor:
-            window = view.window()
-            view.close()
+        file_basename = basename(filepath)[:-len(suffix)]
+        file_temp = join(mkdtemp(), file_basename)
 
-            file_basename = basename(filepath)[:-len(suffix)]
-            file_temp = join(mkdtemp(), file_basename)
+        sublime.status_message("opening compressed file: " + filepath)
+        print("opening compressed file: " + filepath)
+        print("decompress into: " + file_temp)
 
-            sublime.status_message("opening compressed file: " + filepath)
-            print("opening compressed file: " + filepath)
-            print("decompress into: " + file_temp)
+        #with decompressor(filepath) as f_input:
+        f_input = decompressor(filepath)
+        with open(file_temp,"wb") as f_output:
+            copyfileobj(f_input, f_output)
+        decomp_view = window.open_file(file_temp)
+        decomp_view.set_status('decompressed','1')
+        decomp_view.set_read_only(True)
 
-            with decompressor(filepath) as f_input, open(file_temp,"wb") as f_output:
-                copyfileobj(f_input, f_output)
-
-            decomp_view = window.open_file(file_temp)
-            decomp_view.set_status('decompressed','1')
-            decomp_view.set_read_only(True)
+class OpenCompressedFile3(sublime_plugin.EventListener):
+    if hasattr(sublime_plugin.EventListener,'on_load_async'):
+        def on_load_async(self, view):
+            decompressInputFile(view)
+    else:
+        def on_load(self, view):
+            decompressInputFile(view)
 
     def on_close(self, view):
         if view.get_status('decompressed'):
