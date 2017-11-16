@@ -101,10 +101,11 @@ def decompressInputFile(view):
         print("opening compressed file: " + filepath)
         print("decompress into: " + file_temp)
 
-        #with decompressor(filepath) as f_input:
         f_input = decompressor(filepath)
         with open(file_temp,"wb") as f_output:
             copyfileobj(f_input, f_output)
+        f_input.close()
+        
         decomp_view = window.open_file(file_temp)
         decomp_view.set_status('decompressed','1')
         decomp_view.set_read_only(True)
