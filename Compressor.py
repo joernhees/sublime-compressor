@@ -21,21 +21,23 @@ import sublime_plugin
 
 '''
 compression_modules = [
-    {'module' : 'gzip', 'depend' : 'zlib',  'extension' : '.gz',  'header':[0x1F, 0x8B]},
+    {'module' : 'gzip',  'extension' : '.gz',  'header':[0x1F, 0x8B]},
     # since build 3114
-    {'module' : 'bz2',  'depend' : '_bz2',  'extension' : '.bz2', 'header' : [0x42, 0x5A]},
+    {'module' : 'bz2',  'open' : 'BZ2File',  'extension' : '.bz2', 'header' : [0x42, 0x5A]},
     # future proof 20171031
-    {'module' : 'lzma', 'depend' : '_lzma', 'extension' : '.xz',  'header' : [0xDF, 0x37, 0x7A, 0x58, 0x5A, 0x00]} 
+    {'module' : 'lzma', 'extension' : '.xz',  'header' : [0xDF, 0x37, 0x7A, 0x58, 0x5A, 0x00]} 
 ]
 
 
 for compression_module in compression_modules:
-    dependendy = compression_module['depend']
-    if dependendy in sys.builtin_module_names:
-        module = compression_module['module']
-
+    module = compression_module['module']
+    if module in sys.modules:
+        print(module)
+        open_attr = 'open'
+        if 'open' in compression_module:
+            open_attr = compression_module['open']
         decompressor = __import__(module)
-        compression_module['open'] = decompressor.open
+        compression_module['open'] = getattr(decompressor,open_attr)
 
 def get_decompressor_by_header(filename):
     read_header = []
