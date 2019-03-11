@@ -5,7 +5,7 @@
 			
 		],
 		"*": [
-			"sublime-backports.lzma"
+			"backports.lzma"
 		]
 	},
 	"linux": {
