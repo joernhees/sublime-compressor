@@ -1,7 +1,8 @@
 {
 	"windows": {
 		"<3000": [
-			"bz2"
+			"bz2",
+			"backports.lzma"
 		]
 	},
 	"linux": {
