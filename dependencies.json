@@ -5,7 +5,7 @@
 			
 		],
 		"*": [
-			"backports.lzma"
+			"backports_lzma"
 		]
 	},
 	"linux": {
