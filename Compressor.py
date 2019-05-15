@@ -28,7 +28,7 @@ COMPRESSION_MODULES = {
     # since build 3114, Use dependency with older version
     'bz2': {'handler': 'BZ2File', 'extension': '.bz2', 'header': [0x42, 0x5A]},
     # future proof 20171031
-    'backports.lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]},
+    'backports_lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]},
     'lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]}
     # more future proof 20190307
     # brotli framing format is not fixed yet, that mean no magic for now
