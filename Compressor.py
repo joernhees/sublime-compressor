@@ -224,7 +224,8 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
         Constructor
         '''
         sublime_plugin.EventListener.__init__(self)
-        load_modules(COMPRESSION_MODULES)
+        if sublime.version() < '3000':
+            load_modules(COMPRESSION_MODULES)
 
     if hasattr(sublime_plugin.EventListener, 'on_load_async'):
         def on_load_async(self, view):
@@ -248,3 +249,8 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
             remove(filepath)
             # Should be empty by now
             rmdir(dirname(filepath))
+
+
+if sublime.version() >= '3000':
+    def plugin_loaded():
+        load_modules(COMPRESSION_MODULES)
