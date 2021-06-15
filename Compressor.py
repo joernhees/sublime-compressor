@@ -59,9 +59,7 @@ def load_modules(modules_list):
                 if 'handler' in compression_module:
                     open_attr = compression_module['handler']
                 decompressor = __import__(module)
-                #print decompressor
                 path = module.split('.')
-                #path.shift()
                 if len(path) > 1:
                     for element in path[1:]:
                         decompressor = getattr(decompressor, element)
