@@ -250,8 +250,3 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
             remove(filepath)
             # Should be empty by now
             rmdir(dirname(filepath))
-
-
-if sublime.version() >= '3000':
-    def plugin_loaded():
-        load_modules(COMPRESSION_MODULES)
