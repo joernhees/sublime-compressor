@@ -3,6 +3,11 @@
 Sublime text de-Compressor
 View compressed files ( gzip, bzip2 ) content in sublime text
 
+Support verified for
+- gzip (Sublime Text 2)
+- bzip (Sublime Text 3)
+- lzma (Sublime Text 4)
+
 '''
 from os.path import basename, join, dirname
 from os import remove, rmdir, stat
@@ -10,9 +15,9 @@ import sys
 import threading
 import time
 from tempfile import mkdtemp
-
 import sublime
 import sublime_plugin
+
 '''
 # header references
 
@@ -39,33 +44,32 @@ COMPRESSION_MODULES = {
 }
 
 
-def load_modules(modules_list):
+def load_module(module, compression_module):
     '''
-    Load compression modules if available
+    Load one compression module
 
     Parameters
     ----------
-    modules_list : dict
-        indexed of compression_module entries
-
+    module : str module name
+    compression_module
     '''
-    for module in modules_list:
-        if module in sys.modules:
-            print(module)
-            try:
-                compression_module = modules_list[module]
-                open_attr = 'open'
-                # module override
-                if 'handler' in compression_module:
-                    open_attr = compression_module['handler']
-                decompressor = __import__(module)
-                path = module.split('.')
-                if len(path) > 1:
-                    for element in path[1:]:
-                        decompressor = getattr(decompressor, element)
-                compression_module['open'] = getattr(decompressor, open_attr)
-            except Exception as e:
-                print(e)
+    try:
+        if module not in sys.modules:
+            return False
+        open_attr = 'open'
+        # module override
+        if 'handler' in compression_module:
+            open_attr = compression_module['handler']
+        decompressor = __import__(module)
+        path = module.split('.')
+        if len(path) > 1:
+            for element in path[1:]:
+                decompressor = getattr(decompressor, element)
+        compression_module['open'] = getattr(decompressor, open_attr)
+        return True
+    except Exception as e:
+        print(e)
+        return False
 
 
 def get_decompressor_by_header(filename):
@@ -104,8 +108,14 @@ def get_decompressor_by_header(filename):
     with open(filename, "rb") as f_input:
         for module in COMPRESSION_MODULES:
             compression_module = COMPRESSION_MODULES[module]
-            suffix = compression_module['extension']
 
+            if 'loaded' not in compression_module:
+                # Lazy loading modules
+                compression_module['loaded'] = load_module(module, compression_module)
+
+            suffix = compression_module['extension']
+            if not compression_module['loaded']:
+                continue
             if 'open' not in compression_module:
                 continue
             if 'header' not in compression_module:
@@ -204,7 +214,8 @@ def decompress_input_file(view):
             thread.start()
             while thread.is_alive():
                 time.sleep(.1)
-                sublime.status_message("opening compressed file: %s, %i bytes decompressed" % (filepath, bytes_total[0]))
+                message = "opening compressed file: %s, %i bytes decompressed" % (filepath, bytes_total[0])
+                sublime.status_message(message)
             thread.join()
         f_input.close()
 
@@ -217,14 +228,6 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
     '''
     Sublime Text Event for the compressor plugin
     '''
-    def __init__(self):
-        '''
-        Constructor
-        '''
-        sublime_plugin.EventListener.__init__(self)
-        if sublime.version() < '3000':
-            load_modules(COMPRESSION_MODULES)
-
     if hasattr(sublime_plugin.EventListener, 'on_load_async'):
         def on_load_async(self, view):
             '''
