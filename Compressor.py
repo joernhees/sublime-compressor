@@ -5,7 +5,7 @@ View compressed files ( gzip, bzip2 ) content in sublime text
 
 '''
 from os.path import basename, join, dirname
-from os import remove, rmdir
+from os import remove, rmdir, stat
 import sys
 import threading
 import time
@@ -28,7 +28,8 @@ COMPRESSION_MODULES = {
     # since build 3114, Use dependency with older version
     'bz2': {'handler': 'BZ2File', 'extension': '.bz2', 'header': [0x42, 0x5A]},
     # future proof 20171031
-    'lzma': {'extension': '.xz', 'header': [0xDF, 0x37, 0x7A, 0x58, 0x5A, 0x00]}
+    'backports_lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]},
+    'lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]}
     # more future proof 20190307
     # brotli framing format is not fixed yet, that mean no magic for now
     # candidate framing:
@@ -51,13 +52,20 @@ def load_modules(modules_list):
     for module in modules_list:
         if module in sys.modules:
             print(module)
-            compression_module = modules_list[module]
-            open_attr = 'open'
-            # module override
-            if 'handler' in compression_module:
-                open_attr = compression_module['handler']
-            decompressor = __import__(module)
-            compression_module['open'] = getattr(decompressor, open_attr)
+            try:
+                compression_module = modules_list[module]
+                open_attr = 'open'
+                # module override
+                if 'handler' in compression_module:
+                    open_attr = compression_module['handler']
+                decompressor = __import__(module)
+                path = module.split('.')
+                if len(path) > 1:
+                    for element in path[1:]:
+                        decompressor = getattr(decompressor, element)
+                compression_module['open'] = getattr(decompressor, open_attr)
+            except Exception as e:
+                print(e)
 
 
 def get_decompressor_by_header(filename):
@@ -90,6 +98,9 @@ def get_decompressor_by_header(filename):
     and have head guess depending on the view
     probably too much work for our current needs
     '''
+    file_size = stat(filename).st_size
+    if file_size == 0:
+        return None, None
     with open(filename, "rb") as f_input:
         for module in COMPRESSION_MODULES:
             compression_module = COMPRESSION_MODULES[module]
@@ -104,7 +115,8 @@ def get_decompressor_by_header(filename):
             len_header = len(header)
 
             min_len = min(len_header, len_read)
-
+            if file_size < len_header:
+                continue
             if (min_len > 0) and (read_header[0: min_len] != header[0: min_len]):
                 continue
             while len(read_header) < len_header:
@@ -210,7 +222,8 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
         Constructor
         '''
         sublime_plugin.EventListener.__init__(self)
-        load_modules(COMPRESSION_MODULES)
+        if sublime.version() < '3000':
+            load_modules(COMPRESSION_MODULES)
 
     if hasattr(sublime_plugin.EventListener, 'on_load_async'):
         def on_load_async(self, view):
@@ -234,3 +247,8 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
             remove(filepath)
             # Should be empty by now
             rmdir(dirname(filepath))
+
+
+if sublime.version() >= '3000':
+    def plugin_loaded():
+        load_modules(COMPRESSION_MODULES)

@@ -2,6 +2,10 @@
 	"windows": {
 		"<3000": [
 			"bz2"
+			
+		],
+		"*": [
+			"backports_lzma"
 		]
 	},
 	"linux": {
