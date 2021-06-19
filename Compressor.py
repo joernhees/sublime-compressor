@@ -3,6 +3,11 @@
 Sublime text de-Compressor
 View compressed files ( gzip, bzip2 ) content in sublime text
 
+Support verified for
+- gzip (Sublime Text 2)
+- bzip (Sublime Text 3)
+- lzma (Sublime Text 4)
+
 '''
 from os.path import basename, join, dirname
 from os import remove, rmdir, stat
@@ -223,11 +228,6 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
     '''
     Sublime Text Event for the compressor plugin
     '''
-    def __init__(self):
-        '''
-        Constructor
-        '''
-        pass
 
     if hasattr(sublime_plugin.EventListener, 'on_load_async'):
         def on_load_async(self, view):
