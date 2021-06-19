@@ -187,9 +187,15 @@ def decompress_input_file(view):
     Execute work for both version
     '''
     filepath = view.file_name()
+    window = view.window()
+    for item in window.views():
+        if item.get_status('decompressed') == filepath:
+            window.run_command('close_file')
+            window.focus_view(item)
+            return
+
     suffix, decompressor = get_decompressor_by_header(filepath)
     if suffix and decompressor:
-        window = view.window()
 
         '''
         https://stackoverflow.com/a/25631071
@@ -197,7 +203,7 @@ def decompress_input_file(view):
         using `view.close` would throw:
             AttributeError: 'View' object has no attribute 'close'
         '''
-        view.window().run_command('close_file')
+        window.run_command('close_file')
 
         file_basename = basename(filepath)[:-len(suffix)]
         file_temp = join(mkdtemp(), file_basename)
@@ -220,7 +226,7 @@ def decompress_input_file(view):
         f_input.close()
 
         decomp_view = window.open_file(file_temp)
-        decomp_view.set_status('decompressed', '1')
+        decomp_view.set_status('decompressed', filepath)
         decomp_view.set_read_only(True)
 
 
