@@ -10,7 +10,7 @@ Support verified for
 
 '''
 from os.path import basename, join, dirname
-from os import remove, rmdir, stat
+from os import remove, rmdir, stat, rename
 import sys
 import threading
 import time
@@ -172,7 +172,30 @@ def copy_file(f_input, f_output, bytes_total):
     print("%f seconds spent decompressing" % (time.time() - start_time))
 
 
-def decompress_input_file(view):
+def decompress(source, target):
+    suffix, decompressor = get_decompressor_by_header(source)
+    if not (suffix and decompressor):
+        return None
+    sublime.status_message("opening compressed file: %s" % source)
+    print("opening compressed file: " + source)
+    print("decompress into: " + target)
+
+    # some compressor don't support the `with` statement
+    f_input = decompressor(source, 'rb')
+    with open(target, "wb") as f_output:
+        bytes_total = [0]
+        thread = threading.Thread(target=copy_file, args=[f_input, f_output, bytes_total])
+        thread.start()
+        while thread.is_alive():
+            time.sleep(.1)
+            message = "opening compressed file: %s, %i bytes decompressed" % (source, bytes_total[0])
+            sublime.status_message(message)
+        thread.join()
+    f_input.close()
+    return suffix
+
+
+def load_decompress(view):
     '''
     Decompress the view if the file is compressed in an acceptable format
 
@@ -187,41 +210,52 @@ def decompress_input_file(view):
     Execute work for both version
     '''
     filepath = view.file_name()
-    suffix, decompressor = get_decompressor_by_header(filepath)
-    if suffix and decompressor:
-        window = view.window()
+    window = view.window()
+    for item in window.views():
+        if item.get_status('decompressed') == filepath:
+            window.run_command('close_file')
+            window.focus_view(item)
+            return
 
-        '''
-        https://stackoverflow.com/a/25631071
-        you apparently cannot close a view outside of a command
-        using `view.close` would throw:
-            AttributeError: 'View' object has no attribute 'close'
-        '''
-        view.window().run_command('close_file')
+    # file_basename = basename(filepath)[:-len(suffix)]
+    file_basename = basename(filepath)
+    file_temp = join(mkdtemp(), file_basename)
 
-        file_basename = basename(filepath)[:-len(suffix)]
-        file_temp = join(mkdtemp(), file_basename)
+    suffix = decompress(filepath, file_temp)
+    if suffix is None:
+        return
+    if file_temp.endswith(suffix):
+        old_name = file_temp
+        file_temp = file_temp[:-len(suffix)]
+        rename(old_name, file_temp)
 
-        sublime.status_message("opening compressed file: %s" % filepath)
-        print("opening compressed file: " + filepath)
-        print("decompress into: " + file_temp)
+    '''
+    https://stackoverflow.com/a/25631071
+    you apparently cannot close a view outside of a command
+    using `view.close` would throw:
+        AttributeError: 'View' object has no attribute 'close'
+    '''
+    window.run_command('close_file')
+    decomp_view = window.open_file(file_temp)
+    decomp_view.set_status('decompressed', filepath)
+    decomp_view.set_status('decompressed_mtime', str(stat(filepath).st_mtime))
+    print(decomp_view.get_status('decompressed_mtime'))
+    decomp_view.set_read_only(True)
 
-        # some compressor don't support the `with` statement
-        f_input = decompressor(filepath, 'rb')
-        with open(file_temp, "wb") as f_output:
-            bytes_total = [0]
-            thread = threading.Thread(target=copy_file, args=[f_input, f_output, bytes_total])
-            thread.start()
-            while thread.is_alive():
-                time.sleep(.1)
-                message = "opening compressed file: %s, %i bytes decompressed" % (filepath, bytes_total[0])
-                sublime.status_message(message)
-            thread.join()
-        f_input.close()
 
-        decomp_view = window.open_file(file_temp)
-        decomp_view.set_status('decompressed', '1')
-        decomp_view.set_read_only(True)
+def update_decompressed(view):
+    if not view.get_status('decompressed'):
+        return
+    origin = view.get_status('decompressed')
+    mtime = float(view.get_status('decompressed_mtime'))
+    current = stat(origin).st_mtime
+    if current <= mtime:
+        return
+    output = view.file_name()
+
+    if decompress(origin, output) is None:
+        return
+    view.set_status('decompressed_mtime', str(stat(origin).st_mtime))
 
 
 class OpenCompressedFile3(sublime_plugin.EventListener):
@@ -233,13 +267,20 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
             '''
             Sublime text 3 async event listener
             '''
-            decompress_input_file(view)
+            load_decompress(view)
     else:
         def on_load(self, view):
             '''
             Fallback event listener
             '''
-            decompress_input_file(view)
+            load_decompress(view)
+
+    if hasattr(sublime_plugin.EventListener, 'on_activated_async'):
+        def on_activated_async(self, view):
+            update_decompressed(view)
+    else:
+        def on_activated(self, view):
+            update_decompressed(view)
 
     def on_close(self, view):
         '''
