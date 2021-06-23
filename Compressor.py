@@ -9,7 +9,7 @@ Support verified for
 - lzma (Sublime Text 4)
 
 '''
-from os.path import basename, join, dirname
+from os.path import basename, join, dirname, exists
 from os import remove, rmdir, stat, rename
 import sys
 import threading
@@ -125,7 +125,7 @@ def get_decompressor_by_header(filename):
             len_header = len(header)
 
             min_len = min(len_header, len_read)
-            if file_size < len_header:
+            if file_size <= len_header:
                 continue
             if (min_len > 0) and (read_header[0: min_len] != header[0: min_len]):
                 continue
@@ -247,6 +247,8 @@ def update_decompressed(view):
     if not view.get_status('decompressed'):
         return
     origin = view.get_status('decompressed')
+    if not exists(origin):
+        return
     mtime = float(view.get_status('decompressed_mtime'))
     current = stat(origin).st_mtime
     if current <= mtime:
