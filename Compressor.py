@@ -9,7 +9,8 @@ Support verified for
 - lzma (Sublime Text 4)
 
 '''
-from os.path import basename, join, dirname, exists, rename
+from os import remove, rmdir, stat, rename
+from os.path import basename, join, dirname, exists
 import sys
 import threading
 import time
