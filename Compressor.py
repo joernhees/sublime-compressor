@@ -54,8 +54,6 @@ def load_module(module, compression_module):
     compression_module
     '''
     try:
-        if module not in sys.modules:
-            return False
         open_attr = 'open'
         # module override
         if 'handler' in compression_module:
@@ -66,8 +64,10 @@ def load_module(module, compression_module):
             for element in path[1:]:
                 decompressor = getattr(decompressor, element)
         compression_module['open'] = getattr(decompressor, open_attr)
+        print("Compressor: loaded", module)
         return True
     except Exception as e:
+        print("Compressor: couldn't load", module)
         print(e)
         return False
 
@@ -102,7 +102,7 @@ def get_decompressor_by_header(filename):
     and have head guess depending on the view
     probably too much work for our current needs
     '''
-    file_size = stat(filename).st_size
+    file_size = stat(filename).st_size if filename else 0
     if file_size == 0:
         return None, None
     with open(filename, "rb") as f_input:
@@ -169,7 +169,7 @@ def copy_file(f_input, f_output, bytes_total):
             break
         f_output.write(read_buffer)
         bytes_total[0] += bytes_read
-    print("%f seconds spent decompressing" % (time.time() - start_time))
+    print("Compressor: %f seconds spent decompressing" % (time.time() - start_time))
 
 
 def decompress(source, target):
@@ -177,8 +177,8 @@ def decompress(source, target):
     if not (suffix and decompressor):
         return None
     sublime.status_message("opening compressed file: %s" % source)
-    print("opening compressed file: " + source)
-    print("decompress into: " + target)
+    print("Compressor: opening compressed file: " + source)
+    print("Compressor: decompress into: " + target)
 
     # some compressor don't support the `with` statement
     f_input = decompressor(source, 'rb')
@@ -239,7 +239,7 @@ def load_decompress(view):
     decomp_view = window.open_file(file_temp)
     decomp_view.set_status('decompressed', filepath)
     decomp_view.set_status('decompressed_mtime', str(stat(filepath).st_mtime))
-    print(decomp_view.get_status('decompressed_mtime'))
+    print("Compressor: ", decomp_view.get_status('decompressed_mtime'))
     decomp_view.set_read_only(True)
 
 
