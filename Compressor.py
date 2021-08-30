@@ -211,6 +211,11 @@ def load_decompress(view):
     '''
     filepath = view.file_name()
     window = view.window()
+    
+    if window is None:
+        # Sometime window can be None 
+        return
+
     for item in window.views():
         if item.get_status('decompressed') == filepath:
             window.run_command('close_file')
