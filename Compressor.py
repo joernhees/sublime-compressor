@@ -88,7 +88,7 @@ def get_decompressor_by_header(filename):
     decompressor :  func on None
         callable to create a file-like object to read decompressed data from
     '''
-    if not os.path.exists(filename):
+    if not exists(filename):
         return None, None
 
     read_header = []
