@@ -88,6 +88,9 @@ def get_decompressor_by_header(filename):
     decompressor :  func on None
         callable to create a file-like object to read decompressed data from
     '''
+    if not exists(filename):
+        return None, None
+
     read_header = []
     '''
     We cannot reliably get character from the buffer to figure out the header
