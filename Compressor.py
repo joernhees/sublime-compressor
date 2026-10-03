@@ -9,13 +9,13 @@ Support verified for
 - lzma (Sublime Text 4)
 
 '''
-from os import remove, rmdir, stat, rename
+from os import remove, rmdir, stat, replace
 from os.path import basename, join, dirname, exists
-import threading
 import time
 from tempfile import mkdtemp
 import sublime
 import sublime_plugin
+from shutil import copyfileobj
 
 '''
 # header references
@@ -30,7 +30,7 @@ import sublime_plugin
 COMPRESSION_MODULES = {
     'gzip': {'extension': '.gz', 'header': [0x1F, 0x8B]},
     # since build 3114, Use dependency with older version
-    'bz2': {'handler': 'BZ2File', 'extension': '.bz2', 'header': [0x42, 0x5A]},
+    'bz2': {'handler': 'BZ2File', 'extension': '.bz2', 'header': [0x42, 0x5A, 0x68]},
     # future proof 20171031
     'backports_lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]},
     'lzma': {'handler': 'LZMAFile', 'extension': '.xz', 'header': [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]}
@@ -65,7 +65,7 @@ def load_module(module, compression_module):
         compression_module['open'] = getattr(decompressor, open_attr)
         print("Compressor: loaded", module)
         return True
-    except Exception as e:
+    except ImportError as e:
         print("Compressor: couldn't load", module)
         print(e)
         return False
@@ -149,31 +149,6 @@ def get_decompressor_by_header(filename):
     return None, None
 
 
-def copy_file(f_input, f_output, bytes_total):
-    '''
-    Copy file while attempting to report progress
-
-    Parameters
-    ----------
-    f_input : file
-        input file to read from
-    f_output : file
-        output file to write to
-    bytes_total : array of int
-        container to hold a reference to the total bytes decompressed
-    '''
-    bytes_total[0] = 0
-    start_time = time.time()
-    while True:
-        read_buffer = f_input.read(4096)
-        bytes_read = len(read_buffer)
-        if bytes_read == 0:
-            break
-        f_output.write(read_buffer)
-        bytes_total[0] += bytes_read
-    print("Compressor: %f seconds spent decompressing" % (time.time() - start_time))
-
-
 def decompress(source, target):
     suffix, decompressor = get_decompressor_by_header(source)
     if not (suffix and decompressor):
@@ -184,15 +159,15 @@ def decompress(source, target):
 
     # some compressor don't support the `with` statement
     f_input = decompressor(source, 'rb')
-    with open(target, "wb") as f_output:
-        bytes_total = [0]
-        thread = threading.Thread(target=copy_file, args=[f_input, f_output, bytes_total])
-        thread.start()
-        while thread.is_alive():
-            time.sleep(.1)
-            message = "opening compressed file: %s, %i bytes decompressed" % (source, bytes_total[0])
-            sublime.status_message(message)
-        thread.join()
+    try:
+        start_time = time.time()
+        with open(target, "wb") as f_output:
+            copyfileobj(f_input, f_output)
+        print("Compressor: %f second spent decompressing" % (time.time() - start_time))
+    except Exception:
+        f_input.close()
+        raise
+
     f_input.close()
     return suffix
 
@@ -208,9 +183,7 @@ def load_decompress(view):
     '''
     if view.get_status('decompressed'):
         return
-    '''
-    Execute work for both version
-    '''
+    # Execute work for both version
     filepath = view.file_name()
     window = view.window() or sublime.active_window()
 
@@ -218,6 +191,7 @@ def load_decompress(view):
         # Sometime window can be None
         return
 
+    # Check if already decompressed
     for item in window.views():
         if item.get_status('decompressed') == filepath:
             if hasattr(view, 'close'):
@@ -230,15 +204,22 @@ def load_decompress(view):
 
     # file_basename = basename(filepath)[:-len(suffix)]
     file_basename = basename(filepath)
-    file_temp = join(mkdtemp(), file_basename)
-
-    suffix = decompress(filepath, file_temp)
+    dir_temp = mkdtemp()
+    file_temp = join(dir_temp, file_basename)
+    try:
+        suffix = decompress(filepath, file_temp)
+    except Exception:
+        if exists(file_temp):
+            remove(file_temp)
+        rmdir(dir_temp)
+        raise
     if suffix is None:
+        rmdir(dir_temp)
         return
     if file_temp.endswith(suffix):
         old_name = file_temp
         file_temp = file_temp[:-len(suffix)]
-        rename(old_name, file_temp)
+        replace(old_name, file_temp)
 
     '''
     https://stackoverflow.com/a/25631071
@@ -270,9 +251,15 @@ def update_decompressed(view):
         return
     output = view.file_name()
 
-    if decompress(origin, output) is None:
-        return
-    view.set_status('decompressed_mtime', str(stat(origin).st_mtime))
+    file_temp = output + ".tmp"
+    try:
+        if decompress(origin, file_temp) is None:
+            return
+        replace(file_temp, output)
+        view.set_status('decompressed_mtime', str(stat(origin).st_mtime))
+    finally:
+        if exists(file_temp):
+            remove(file_temp)
 
 
 class OpenCompressedFile3(sublime_plugin.EventListener):
@@ -281,15 +268,11 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
     '''
     if hasattr(sublime_plugin.EventListener, 'on_load_async'):
         def on_load_async(self, view):
-            '''
-            Sublime text 3 async event listener
-            '''
+            # Sublime text 3 async event listener
             load_decompress(view)
     else:
         def on_load(self, view):
-            '''
-            Fallback event listener
-            '''
+            # Fallback event listener
             load_decompress(view)
 
     if hasattr(sublime_plugin.EventListener, 'on_activated_async'):
@@ -305,6 +288,7 @@ class OpenCompressedFile3(sublime_plugin.EventListener):
         '''
         if view.get_status('decompressed'):
             filepath = view.file_name()
-            remove(filepath)
-            # Should be empty by now
-            rmdir(dirname(filepath))
+            if filepath and exists(filepath):
+                remove(filepath)
+                # Should be empty by now
+                rmdir(dirname(filepath))
