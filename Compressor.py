@@ -11,7 +11,6 @@ Support verified for
 '''
 from os import remove, rmdir, stat, rename
 from os.path import basename, join, dirname, exists
-import sys
 import threading
 import time
 from tempfile import mkdtemp
@@ -213,15 +212,19 @@ def load_decompress(view):
     Execute work for both version
     '''
     filepath = view.file_name()
-    window = view.window()
-    
+    window = view.window() or sublime.active_window()
+
     if window is None:
-        # Sometime window can be None 
+        # Sometime window can be None
         return
 
     for item in window.views():
         if item.get_status('decompressed') == filepath:
-            window.run_command('close_file')
+            if hasattr(view, 'close'):
+                view.close()
+            else:
+                window.focus_view(view)
+                window.run_command('close_file')
             window.focus_view(item)
             return
 
@@ -243,7 +246,11 @@ def load_decompress(view):
     using `view.close` would throw:
         AttributeError: 'View' object has no attribute 'close'
     '''
-    window.run_command('close_file')
+    if hasattr(view, 'close'):
+        view.close()
+    else:
+        window.focus_view(view)
+        window.run_command('close_file')
     decomp_view = window.open_file(file_temp)
     decomp_view.set_status('decompressed', filepath)
     decomp_view.set_status('decompressed_mtime', str(stat(filepath).st_mtime))
