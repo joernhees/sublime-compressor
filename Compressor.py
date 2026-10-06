@@ -16,6 +16,7 @@ from tempfile import mkdtemp
 import sublime
 import sublime_plugin
 from shutil import copyfileobj
+from contextlib import closing
 
 '''
 # header references
@@ -127,7 +128,7 @@ def get_decompressor_by_header(filename):
             len_header = len(header)
 
             min_len = min(len_header, len_read)
-            if file_size <= len_header:
+            if file_size < len_header:
                 continue
             if (min_len > 0) and (read_header[0: min_len] != header[0: min_len]):
                 continue
@@ -157,18 +158,13 @@ def decompress(source, target):
     print("Compressor: opening compressed file: " + source)
     print("Compressor: decompress into: " + target)
 
-    # some compressor don't support the `with` statement
-    f_input = decompressor(source, 'rb')
-    try:
+    # using contextlib.closing() because some compressor don't implement the context manager protocol
+    with closing(decompressor(source, 'rb')) as f_input:
         start_time = time.time()
         with open(target, "wb") as f_output:
             copyfileobj(f_input, f_output)
-        print("Compressor: %f second spent decompressing" % (time.time() - start_time))
-    except Exception:
-        f_input.close()
-        raise
+        print("Compressor: %f seconds spent decompressing" % (time.time() - start_time))
 
-    f_input.close()
     return suffix
 
 
@@ -182,9 +178,14 @@ def load_decompress(view):
         view that contains the file to be decompressed
     '''
     if view.get_status('decompressed'):
+        view.set_read_only(True)
         return
     # Execute work for both version
     filepath = view.file_name()
+
+    if not filepath:
+        return
+
     window = view.window() or sublime.active_window()
 
     if window is None:
@@ -250,13 +251,16 @@ def update_decompressed(view):
     if current <= mtime:
         return
     output = view.file_name()
-
+    if not output:
+        return
     file_temp = output + ".tmp"
     try:
         if decompress(origin, file_temp) is None:
             return
         replace(file_temp, output)
         view.set_status('decompressed_mtime', str(stat(origin).st_mtime))
+        if not view.is_loading():
+            view.run_command('revert')
     finally:
         if exists(file_temp):
             remove(file_temp)
